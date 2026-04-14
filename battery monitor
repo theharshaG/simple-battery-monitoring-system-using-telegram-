@@ -1,0 +1,86 @@
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+
+const char* ssid = "YOUR_WIFI";
+const char* password = "YOUR_PASSWORD";
+
+String botToken = "YOUR_TOKEN";
+String chatID = "YOUR_CHAT_ID";
+
+int sensorPin = 34;
+
+float lastVoltage = 0;
+unsigned long lastSendTime = 0;
+
+void sendMessage(String message) {
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+
+  String url = "https://api.telegram.org/bot" + botToken +
+               "/sendMessage?chat_id=" + chatID +
+               "&text=" + message;
+
+  http.begin(client, url);
+  int httpCode = http.GET();
+
+  Serial.println("HTTP Code: " + String(httpCode));
+
+  http.end();
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Connecting...");
+  }
+
+  Serial.println("Connected to WiFi");
+}
+
+void loop() {
+
+
+  int value = analogRead(sensorPin);
+  float vout = (value * 3.3) / 4095.0;
+  float voltage = vout * 5;  // adjust calibration if needed
+
+  Serial.println("Voltage: " + String(voltage));
+
+  unsigned long currentTime = millis();
+
+String status;
+  if (voltage > 12.5)
+    status = "Full";
+  else if (voltage > 11.5)
+    status = "Medium";
+  else
+    status = "Low ⚠️";
+
+  String message = "🔋 Battery: " + String(voltage) + "V | " + status;
+
+  bool voltageChanged = abs(voltage - lastVoltage) > 0.2;
+
+  bool timePassed = (currentTime - lastSendTime) > 60000;
+
+  if (voltageChanged || timePassed) {
+
+    sendMessage(message);
+
+    lastVoltage = voltage;
+    lastSendTime = currentTime;
+  }
+
+  if (voltage < 11.5) {
+    sendMessage("⚠️ Battery LOW: " + String(voltage) + "V");
+    delay(60000); // avoid spamming
+  }
+
+  delay(5000);
+}
